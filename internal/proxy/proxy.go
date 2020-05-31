@@ -97,7 +97,7 @@ func (p *Proxy) handle(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("failed to parse callURL"))
 	}
-	proxy := httputil.NewSingleHostReverseProxy(target)
+	proxy := newProxy(target, r)
 	proxy.ServeHTTP(w, r)
 }
 
@@ -110,4 +110,14 @@ func getHostName(host string) string {
 		return parts[0]
 	}
 	return host
+}
+
+func newProxy(target *url.URL, r *http.Request) *httputil.ReverseProxy {
+	return &httputil.ReverseProxy{
+		Director: func(req *http.Request) {
+			req.URL.Path = target.Path
+			req.URL.Scheme = target.Scheme
+			req.URL.Host = target.Host
+		},
+	}
 }
