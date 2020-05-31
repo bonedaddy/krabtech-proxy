@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/go-chi/chi/middleware"
+
 	"github.com/go-chi/chi"
 	"go.uber.org/multierr"
 )
@@ -36,6 +38,14 @@ func New(addr string, backends map[string]*BackendHost) *Proxy {
 		wg:       &sync.WaitGroup{},
 		backends: backends,
 	}
+	if true {
+		proxy.r.Use(middleware.BasicAuth("testrealm", map[string]string{"user": "pass"}))
+	}
+	proxy.r.Use(
+		middleware.RequestID,
+		middleware.RealIP,
+		middleware.Recoverer,
+	)
 	proxy.r.HandleFunc("/*", proxy.handle)
 	proxy.srv = &http.Server{Addr: addr, Handler: proxy.r}
 	return proxy
@@ -67,7 +77,7 @@ func (p *Proxy) handle(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("failed to parse hostname"))
 		return
 	}
-	backend := p.backends[host]
+	backend := p.backends[getHostName(host)]
 	if backend == nil {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("no backend matching hostname"))
