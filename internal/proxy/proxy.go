@@ -3,16 +3,22 @@ package proxy
 
 import (
 	"context"
+	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"strings"
 	"sync"
 
+	"github.com/oxtoacart/bpool"
+
 	"github.com/go-chi/chi/middleware"
+	"go.bobheadxi.dev/zapx/zapx"
 
 	"github.com/go-chi/chi"
 	"go.uber.org/multierr"
+	"go.uber.org/zap"
 )
 
 // Proxy enables a http proxy
@@ -21,6 +27,7 @@ type Proxy struct {
 	srv      *http.Server
 	wg       *sync.WaitGroup
 	backends map[string]*BackendHost
+	logger   *zap.Logger
 }
 
 // BackendHost is a host we want to proxy to
@@ -32,11 +39,16 @@ type BackendHost struct {
 }
 
 // New returns an initialized, but unstarted proxy
-func New(addr string, backends map[string]*BackendHost) *Proxy {
+func New(addr, logfile string, backends map[string]*BackendHost) *Proxy {
+	logger, err := zapx.New(logfile, false)
+	if err != nil {
+		panic(err)
+	}
 	proxy := &Proxy{
 		r:        chi.NewRouter(),
 		wg:       &sync.WaitGroup{},
 		backends: backends,
+		logger:   logger.Named("proxy"),
 	}
 	if true {
 		proxy.r.Use(middleware.BasicAuth("testrealm", map[string]string{"user": "pass"}))
@@ -44,6 +56,7 @@ func New(addr string, backends map[string]*BackendHost) *Proxy {
 	proxy.r.Use(
 		middleware.RequestID,
 		middleware.RealIP,
+		NewMiddleware(proxy.logger.Named("http.middleware")),
 		middleware.Recoverer,
 	)
 	proxy.r.HandleFunc("/*", proxy.handle)
@@ -97,7 +110,7 @@ func (p *Proxy) handle(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("failed to parse callURL"))
 	}
-	proxy := newProxy(target, r)
+	proxy := p.newProxy(target, r)
 	proxy.ServeHTTP(w, r)
 }
 
@@ -112,12 +125,20 @@ func getHostName(host string) string {
 	return host
 }
 
-func newProxy(target *url.URL, r *http.Request) *httputil.ReverseProxy {
+func (p *Proxy) newProxy(target *url.URL, r *http.Request) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
 			req.URL.Path = target.Path
 			req.URL.Scheme = target.Scheme
 			req.URL.Host = target.Host
 		},
+		ErrorLog: func() *log.Logger {
+			slog, err := zap.NewStdLogAt(p.logger, zap.ErrorLevel)
+			if err != nil {
+				return log.New(os.Stdout, "", log.LstdFlags)
+			}
+			return slog
+		}(),
+		BufferPool: bpool.NewBytePool(10*1024, 10*1024),
 	}
 }

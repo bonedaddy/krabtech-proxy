@@ -19,7 +19,7 @@ func TestProxy(t *testing.T) {
 	wg.Add(1)
 	go func() { testServer.run(ctx); wg.Done() }()
 
-	testProxy := New(":6665", map[string]*BackendHost{
+	testProxy := New(":6665", "file.log", map[string]*BackendHost{
 		"foobar": &BackendHost{
 			Insecure: true,
 			Addr:     "localhost:6666",

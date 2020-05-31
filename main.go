@@ -22,6 +22,12 @@ func main() {
 			Usage:   "address for proxy to listsen on",
 			Value:   "localhost:8448",
 		},
+		&cli.StringFlag{
+			Name:    "log.file",
+			Aliases: []string{"lf"},
+			Usage:   "file to log to",
+			Value:   "file.log",
+		},
 		&cli.BoolFlag{
 			Name:  "https.enabled",
 			Usage: "enable listening with https",
@@ -33,6 +39,7 @@ func main() {
 			Action: func(c *cli.Context) error {
 				p := proxy.New(
 					c.String("listen.address"),
+					c.String("file.log"),
 					map[string]*proxy.BackendHost{
 						"localhost": &proxy.BackendHost{
 							Addr:     "localhost:8080",
