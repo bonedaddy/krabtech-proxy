@@ -30,28 +30,20 @@ type Proxy struct {
 	logger   *zap.Logger
 }
 
-// BackendHost is a host we want to proxy to
-type BackendHost struct {
-	// address of the backend host
-	Addr string
-	// if true we use http connection
-	Insecure bool
-}
-
 // New returns an initialized, but unstarted proxy
-func New(addr, logfile string, backends map[string]*BackendHost) *Proxy {
-	logger, err := zapx.New(logfile, false)
+func New(opts *Options) *Proxy {
+	logger, err := zapx.New(opts.LogFile, false)
 	if err != nil {
 		panic(err)
 	}
 	proxy := &Proxy{
 		r:        chi.NewRouter(),
 		wg:       &sync.WaitGroup{},
-		backends: backends,
+		backends: opts.Backends,
 		logger:   logger.Named("proxy"),
 	}
-	if true {
-		proxy.r.Use(middleware.BasicAuth("testrealm", map[string]string{"user": "pass"}))
+	if opts.BasicAuthEnabled {
+		proxy.r.Use(middleware.BasicAuth(opts.BasicAuthRealm, opts.BasicAuthUsers))
 	}
 	proxy.r.Use(
 		middleware.RequestID,
@@ -60,7 +52,7 @@ func New(addr, logfile string, backends map[string]*BackendHost) *Proxy {
 		middleware.Recoverer,
 	)
 	proxy.r.HandleFunc("/*", proxy.handle)
-	proxy.srv = &http.Server{Addr: addr, Handler: proxy.r}
+	proxy.srv = &http.Server{Addr: opts.ListenAddress, Handler: proxy.r}
 	return proxy
 }
 
@@ -84,6 +76,11 @@ func (p *Proxy) Run(ctx context.Context) error {
 }
 
 func (p *Proxy) handle(w http.ResponseWriter, r *http.Request) {
+	if p.backends == nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		w.Write([]byte("no backends configured"))
+		return
+	}
 	host := r.Host
 	if host == "" {
 		w.WriteHeader(http.StatusBadRequest)
@@ -114,17 +111,6 @@ func (p *Proxy) handle(w http.ResponseWriter, r *http.Request) {
 	proxy.ServeHTTP(w, r)
 }
 
-func getHostName(host string) string {
-	if strings.Contains(host, ":") {
-		parts := strings.Split(host, ":")
-		if len(parts) == 0 {
-			return ""
-		}
-		return parts[0]
-	}
-	return host
-}
-
 func (p *Proxy) newProxy(target *url.URL, r *http.Request) *httputil.ReverseProxy {
 	return &httputil.ReverseProxy{
 		Director: func(req *http.Request) {
@@ -141,4 +127,15 @@ func (p *Proxy) newProxy(target *url.URL, r *http.Request) *httputil.ReverseProx
 		}(),
 		BufferPool: bpool.NewBytePool(10*1024, 10*1024),
 	}
+}
+
+func getHostName(host string) string {
+	if strings.Contains(host, ":") {
+		parts := strings.Split(host, ":")
+		if len(parts) == 0 {
+			return ""
+		}
+		return parts[0]
+	}
+	return host
 }

@@ -38,12 +38,14 @@ func main() {
 			Name: "run",
 			Action: func(c *cli.Context) error {
 				p := proxy.New(
-					c.String("listen.address"),
-					c.String("file.log"),
-					map[string]*proxy.BackendHost{
-						"localhost": &proxy.BackendHost{
-							Addr:     "localhost:8080",
-							Insecure: true,
+					&proxy.Options{
+						ListenAddress: c.String("listen.address"),
+						LogFile:       c.String("file.log"),
+						Backends: map[string]*proxy.BackendHost{
+							"localhost": {
+								Addr:     "localhost:8080",
+								Insecure: true,
+							},
 						},
 					},
 				)
