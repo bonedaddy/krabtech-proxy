@@ -57,16 +57,23 @@ func New(opts *Options) *Proxy {
 }
 
 // Run starts the http proxy
-func (p *Proxy) Run(ctx context.Context) error {
+func (p *Proxy) Run(ctx context.Context, tlsOpts *TLSOpts) error {
 	var (
-		err    = make(chan error, 1)
-		errors []error
+		err     = make(chan error, 1)
+		errors  []error
+		runFunc = func() error {
+			if tlsOpts != nil {
+				p.srv.TLSConfig = tlsOpts.cfg
+				return p.srv.ListenAndServeTLS(tlsOpts.CertFile, tlsOpts.KeyFile)
+			}
+			return p.srv.ListenAndServe()
+		}
 	)
 	p.wg.Add(1)
 	defer p.wg.Wait()
 	go func() {
 		defer p.wg.Done()
-		err <- p.srv.ListenAndServe()
+		err <- runFunc()
 	}()
 	<-ctx.Done()
 	closeErr := p.srv.Close()

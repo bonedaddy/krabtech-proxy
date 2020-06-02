@@ -49,7 +49,7 @@ func main() {
 						},
 					},
 				)
-				return p.Run(ctx)
+				return p.Run(ctx, nil)
 			},
 		},
 		&cli.Command{
