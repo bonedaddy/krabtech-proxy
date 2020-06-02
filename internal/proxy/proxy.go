@@ -10,8 +10,11 @@ import (
 	"os"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/oxtoacart/bpool"
+	cache "github.com/victorspringer/http-cache"
+	"github.com/victorspringer/http-cache/adapter/memory"
 
 	"github.com/go-chi/chi/middleware"
 	"go.bobheadxi.dev/zapx/zapx"
@@ -51,7 +54,22 @@ func New(opts *Options) *Proxy {
 		NewMiddleware(proxy.logger.Named("http.middleware")),
 		middleware.Recoverer,
 	)
-	proxy.r.HandleFunc("/*", proxy.handle)
+	memcache, err := memory.NewAdapter(
+		memory.AdapterWithAlgorithm(memory.LRU),
+		memory.AdapterWithCapacity(10000),
+	)
+	if err != nil {
+		panic(err)
+	}
+	cacheClient, err := cache.NewClient(
+		cache.ClientWithAdapter(memcache),
+		cache.ClientWithTTL(10*time.Minute),
+		cache.ClientWithRefreshKey("refresh-cache"),
+	)
+	if err != nil {
+		panic(err)
+	}
+	proxy.r.Handle("/*", cacheClient.Middleware(http.HandlerFunc(proxy.handle)))
 	proxy.srv = &http.Server{Addr: opts.ListenAddress, Handler: proxy.r}
 	return proxy
 }

@@ -1,6 +1,8 @@
 package proxy
 
-import "crypto/tls"
+import (
+	"crypto/tls"
+)
 
 var (
 	tlsConfig = tls.Config{
