@@ -12,6 +12,7 @@ import (
 	"sync"
 
 	"github.com/lox/httpcache"
+	"github.com/lox/httpcache/httplog"
 	"github.com/oxtoacart/bpool"
 
 	"github.com/go-chi/chi/middleware"
@@ -58,7 +59,9 @@ func New(opts *Options) *Proxy {
 	)
 	// TODO(bonedaddy): should it be disabled?
 	handler.Shared = true
-	proxy.r.Handle("/*", handler)
+	resplogger := httplog.NewResponseLogger(handler)
+	resplogger.DumpErrors = true
+	proxy.r.HandleFunc("/*", resplogger.ServeHTTP)
 	proxy.srv = &http.Server{Addr: opts.ListenAddress, Handler: proxy.r}
 	return proxy
 }
